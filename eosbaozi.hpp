@@ -4,7 +4,12 @@
 #include <eosiolib/asset.hpp>
 #include <string>
 #include <eosiolib/currency.hpp>
-#define MAX_CORONATION_TIME 300
+
+#define MAX_CORONATION_TIME (300)
+#define MAX_TABLE_NUMBER (100)
+#define MAX_PLAYER_NUMBER (9)
+#define TEAM_ROYALTY ((double)(0.05))
+#define INVITER_ROYALTY ((double)(0.02))
 
 using namespace eosio;
 
@@ -111,20 +116,20 @@ class eosbaozi : public eosio::contract
     typedef eosio::multi_index<N(accrecords), account_record> account_records_db;
     typedef eosio::multi_index<N(gametables), gametable> gametables_db;
 
-    void onTransfer(const eosio::currency::transfer& transfer);
-    void draw(account_name banker);
-    void withdraw(account_name player);
-    void drop(account_name banker);
-    void apply( account_name contract, account_name act );
+    void onTransfer(const eosio::currency::transfer& transfer);             
+    void draw(account_name banker);                                         //开注
+    void withdraw(account_name player);                                     //提现
+    void drop(account_name banker);                                         //弃桌 
+    void apply( account_name contract, account_name act );                           
 
   private:
     vector<uint8_t> deck = {1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10,1,2,3,4,5,6,7,8,9,10};
     account_records_db accrecords;
     gametables_db gametables;
-    void addbalance(account_name player, asset balance);
-    void addinviter(account_name player, account_name inviter);
-    void generaterandom(checksum256 &result, uint64_t round);
-    uint8_t dealpoker(vector<uint8_t> &poker,checksum256 result, int turn);
-    void create(account_name banker, asset stake);
-    void bet(account_name banker,account_name player,asset bet);
+    void addbalance(account_name player, asset balance);                     //增加用户余额
+    void addinviter(account_name player, account_name inviter);              //添加邀请者
+    void generaterandom(checksum256 &result, uint64_t round);                //生成随机数
+    uint8_t dealpoker(vector<uint8_t> &poker,checksum256 result, int turn);  //发牌
+    void create(account_name banker, asset stake);                           //创建桌子
+    void bet(account_name banker,account_name player,asset bet);             //下注
 };

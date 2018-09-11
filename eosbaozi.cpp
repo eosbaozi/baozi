@@ -152,46 +152,57 @@ void eosbaozi::draw(account_name banker)
     vector<uint8_t> poker = deck;
     vector<player> curplayers = itr->players;
 
+    // 生成随机数
     checksum256 result;
     generaterandom(result,itr->round);
+
+    //给庄家发牌
     uint8_t bankpoker1 = dealpoker(poker,result,0);
     uint8_t bankpoker2 = dealpoker(poker,result,1);
-    uint8_t bankpoker = bankpoker1+bankpoker2;
-    vector<uint8_t> curbankpoker = {bankpoker1, bankpoker2};
+    vector<uint8_t> bankpoker = {bankpoker1, bankpoker2};
+
+    //给玩家发牌
     for(uint8_t playerturn = 1;playerturn<=curplayers.size();playerturn++){
         curplayers[playerturn-1].poker[0] = dealpoker(poker,result,playerturn*2);
         curplayers[playerturn-1].poker[1] = dealpoker(poker,result,playerturn*2+1);
     }
 
+    //将玩家按牌点数大小从大到小排序
     sort(curplayers.begin(),curplayers.end(),greatersort);
 
+    //将点数小于庄家点数的玩家投注金额加入庄家
     asset curstake = itr->stake;
     for(auto itp=curplayers.begin();itp != curplayers.end();++itp){
-        curstake += curstake + itp->bet;
-    }
-
-    for(auto it=curplayers.begin();it != curplayers.end();++it){
-        if(bankpoker < (it->poker[0]+it->poker[1])){
-            if(curstake.amount>0){
-                if(curstake>=it->bet){
-                    addbalance(it->name,(it->bet)*2);
-                    curstake -= (it->bet)*2;
-                }else{
-                    addbalance(it->name, (it->bet + curstake));
-                    curstake = asset(0,CORE_SYMBOL);
-                }
-            }
+        if((bankpoker[0]+bankpoker[1]) < (itp->poker[0]+itp->poker[1])){
+            curstake += curstake + itp->bet;
         }
     }
 
+    //从大到小排序将庄家的金额加入点数大于庄家的玩家
+    for(auto it=curplayers.begin();it != curplayers.end();++it){
+        if((bankpoker[0]+bankpoker[1]) < (it->poker[0]+it->poker[1])){
+        
+            if(curstake>=it->bet){
+                //余额充足的情况下玩家获得一倍收益
+                addbalance(it->name,(it->bet)*2);
+                curstake -= it->bet;
+            }else{
+                //余额不足的情况下玩家获得余额为收益
+                addbalance(it->name, (it->bet + curstake));
+                curstake = asset(0,CORE_SYMBOL);
+            }
+        }
+    }
+    //庄家余额不足10时自动下庄
     if(curstake.amount < 10){
         addbalance(banker, itr->stake);
         gametables.erase(itr);
     }else{
+        //否则继续开启下一轮游戏
         vector<player> newplayers ;
-        game pregame(result, curplayers, curbankpoker);
+        game pregame(result, curplayers, bankpoker);
         gametables.modify(itr, banker, [&]( auto& gametable ){
-        gametable.stake = curstake;
+        gametable.stake = curstake; 
         gametable.pregame = pregame;
         gametable.status = OPEN;
         gametable.round += 1;
@@ -199,9 +210,6 @@ void eosbaozi::draw(account_name banker)
         gametable.players = newplayers;
         });
     }
-    
-
-
 }
 
 uint8_t eosbaozi::dealpoker(vector<uint8_t> &poker,checksum256 result, int turn){
