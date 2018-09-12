@@ -9,7 +9,7 @@
 #include <eosiolib/crypto.h>
 #include <utility>
 
-#define CORE_SYMBOL S(4,EOS) // MainNet + JungleTestNet use EOS
+// #define CORE_SYMBOL S(4,EOS) // MainNet + JungleTestNet use EOS
 
 using namespace eosio;
 using namespace std;
@@ -48,7 +48,7 @@ void eosbaozi::onTransfer(const currency::transfer &transfer)
     if (transfer.to != _self)
         return;
 
-    eosio_assert(transfer.from != _self, "deployed contract may not take part in claiming the throne");
+    eosio_assert(transfer.from != _self, "deployed contract may not take part in baozi");
 
     // print("Transfer memo: ", transfer.memo.c_str());
     eosio_assert(transfer.quantity.symbol == CORE_SYMBOL, "must pay with EOS token");
@@ -57,31 +57,40 @@ void eosbaozi::onTransfer(const currency::transfer &transfer)
     // boost::split(results, transfer.memo, [](const char c) { return c == ';'; });
     splitMemo(results, transfer.memo);
     eosio_assert(results.size() >= 2 , "transfer memo needs two arguments separated by ';'");
-    eosio_assert(results[0] == "eosbaozi" && (results[1] == "create" || results[1] == "bet"), "kingdom arguments failed the size requirements");
+    eosio_assert(results[0] == "eosbaozi" && (results[1] == "create" || results[1] == "bet"), "baozi arguments failed the size requirements");
 
     if(results[1]=="create"){
         create(transfer.from, transfer.quantity);
     }else{
         eosio_assert(results.size() >= 3 , "transfer memo needs three arguments separated by ';'");
-        bet(N(results[2]), transfer.from, transfer.quantity);
+        eosio_assert(results[2].length() <= 14 , "banker is error");
+        eosio::print("what happen is results[2]",results[2]);
+        // string* p = results[2];
+        char c[20];
+        strcpy(c,results[2].c_str());
+        bet(eosio::string_to_name(c), transfer.from, transfer.quantity);
     }
 
     if(results.size() >= 4 && (results[3].length()>0)){
-        addinviter(transfer.from, N(results[3]));
+        eosio_assert(results[3].length() <= 14 , "inviter is error");
+        char z[20];
+        strcpy(z,results[3].c_str());
+        addinviter(transfer.from, eosio::string_to_name(z));
     }
 }
 
 void eosbaozi::addinviter(account_name player,account_name inviter){
+    eosio_assert(is_account(inviter) , "inviter is not account");
     auto itr = accrecords.find(player);
         if(itr == accrecords.end()){
-            accrecords.emplace(player,[&](auto &newplayer) {
+            accrecords.emplace(_self,[&](auto &newplayer) {
             newplayer.player = player;
             newplayer.balance = asset(0,CORE_SYMBOL);
             newplayer.inviter = inviter;
             });
         }else{
             if(is_account(itr->inviter)){
-                accrecords.modify( itr,  player, [&]( auto& oldplayer ) {
+                accrecords.modify( itr,  _self, [&]( auto& oldplayer ) {
                 oldplayer.inviter = inviter;
                 });
             }
@@ -92,21 +101,20 @@ void eosbaozi::addinviter(account_name player,account_name inviter){
 
 void eosbaozi::create(account_name banker, asset stake)
 {
+    eosio_assert(stake.amount > 1000000, "stake is too low");
     auto itr = gametables.find(banker);
 
     eosio_assert(itr == gametables.end(), "table is exist");
 
     auto beginitr = gametables.begin();
     int i = 0;
-    for(;i<100;i++){
-        if(beginitr!=gametables.end()){
-            beginitr++;
-        }
+    for(;beginitr!=gametables.end();beginitr++){
+        i++;
     }
 
     eosio_assert(i<100, "game table is too much");
 
-    gametables.emplace(banker,[&](auto &gametable) {
+    gametables.emplace(_self,[&](auto &gametable) {
         gametable.banker = banker;
         gametable.stake = stake;
         gametable.status = OPEN;
@@ -116,24 +124,26 @@ void eosbaozi::create(account_name banker, asset stake)
 
 void eosbaozi::bet(account_name banker,account_name player, asset bet)
 {
+    eosio_assert(player != banker, "don't bet yourself");
+    eosio::print("hello,what wrong ",banker);
     auto itr = gametables.find(banker);
 
     eosio_assert(itr != gametables.end(), "table is not exist");
-    eosio_assert(bet.amount < 100, "bet is too much");
+    eosio_assert(bet.amount < 1000000, "bet is too much");
     vector<eosbaozi::player> gameplayers = itr->players;
     eosio_assert(gameplayers.size() < 9, "player is too much");
     vector<uint16_t> poker;
     eosbaozi::player newplayer = eosbaozi::player(player,bet,poker);
     if(gameplayers.size()==0){
         gameplayers.emplace_back(newplayer);
-        gametables.modify( itr,  banker, [&]( auto& gametable ) {
+        gametables.modify( itr,  _self, [&]( auto& gametable ) {
         gametable.players = gameplayers;
         gametable.status = LOCKING;
         gametable.starttime = now();
         });
     }else{
         gameplayers.emplace_back(newplayer);
-        gametables.modify( itr,  banker, [&]( auto& gametable ) {
+        gametables.modify( itr,  _self, [&]( auto& gametable ) {
         gametable.players = gameplayers;
         gametable.status = LOCKING;
         });
@@ -148,7 +158,7 @@ void eosbaozi::draw(account_name banker)
     auto itr = gametables.find(banker);
     eosio_assert(itr != gametables.end(), "table is not exist");
     eosio_assert(itr->players.size() > 0 , "don't have player");
-    eosio_assert(now() > itr->starttime + MAX_CORONATION_TIME, "max coronation time not reached yet");
+    eosio_assert(now() > itr->starttime + MAX_CORONATION_TIME, "max draw time not reached yet");
     vector<uint8_t> poker = deck;
     vector<player> curplayers = itr->players;
 
@@ -163,8 +173,10 @@ void eosbaozi::draw(account_name banker)
 
     //给玩家发牌
     for(uint8_t playerturn = 1;playerturn<=curplayers.size();playerturn++){
-        curplayers[playerturn-1].poker[0] = dealpoker(poker,result,playerturn*2);
-        curplayers[playerturn-1].poker[1] = dealpoker(poker,result,playerturn*2+1);
+        uint8_t playerpoker1 = dealpoker(poker,result,playerturn*2);
+        uint8_t playerpoker2 = dealpoker(poker,result,playerturn*2+1);
+        curplayers[playerturn-1].poker.emplace_back(playerpoker1) ;
+        curplayers[playerturn-1].poker.emplace_back(playerpoker2) ;
     }
 
     //将玩家按牌点数大小从大到小排序
@@ -174,7 +186,7 @@ void eosbaozi::draw(account_name banker)
     asset curstake = itr->stake;
     for(auto itp=curplayers.begin();itp != curplayers.end();++itp){
         if((bankpoker[0]+bankpoker[1]) < (itp->poker[0]+itp->poker[1])){
-            curstake += curstake + itp->bet;
+            curstake += itp->bet;
         }
     }
 
@@ -201,7 +213,7 @@ void eosbaozi::draw(account_name banker)
         //否则继续开启下一轮游戏
         vector<player> newplayers ;
         game pregame(result, curplayers, bankpoker);
-        gametables.modify(itr, banker, [&]( auto& gametable ){
+        gametables.modify(itr, _self, [&]( auto& gametable ){
         gametable.stake = curstake; 
         gametable.pregame = pregame;
         gametable.status = OPEN;
@@ -234,6 +246,7 @@ void eosbaozi::generaterandom(checksum256 &result, uint64_t round){
 
 void eosbaozi::drop(account_name banker)
 {
+    eosio::print("hello my friend");
     require_auth(banker);
     auto itr = gametables.find(banker);
     eosio_assert(itr != gametables.end(), "table is not exist");
@@ -247,13 +260,13 @@ void eosbaozi::addbalance(account_name player, asset balance)
 {
     auto itr = accrecords.find(player);
     if(itr == accrecords.end()){
-        accrecords.emplace(player,[&](auto &newplayer) {
+        accrecords.emplace(_self,[&](auto &newplayer) {
         newplayer.player = player;
         newplayer.balance = balance;
         });
 
     }else{
-        accrecords.modify( itr,  player, [&]( auto& oldplayer ) {
+        accrecords.modify( itr,  _self, [&]( auto& oldplayer ) {
         oldplayer.balance += balance;
         });
     }
@@ -272,7 +285,7 @@ void eosbaozi::withdraw(account_name player)
             std::make_tuple(_self, player, itr->balance, std::string("")));
     transferact.send();
 
-    accrecords.modify( itr,  player, [&]( auto& oldplayer ) {
+    accrecords.modify( itr,  _self, [&]( auto& oldplayer ) {
         oldplayer.balance = asset(0,CORE_SYMBOL);
     });
 
@@ -296,7 +309,7 @@ void eosbaozi::apply(account_name contract, account_name act)
     switch (act)
     {
         // first argument is name of CPP class, not contract
-        EOSIO_API(eosbaozi, (draw)(withdraw))
+        EOSIO_API(eosbaozi, (draw)(withdraw)(drop))
     };
 }
 
