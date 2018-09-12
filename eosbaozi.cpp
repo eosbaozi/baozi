@@ -64,8 +64,7 @@ void eosbaozi::onTransfer(const currency::transfer &transfer)
     }else{
         eosio_assert(results.size() >= 3 , "transfer memo needs three arguments separated by ';'");
         eosio_assert(results[2].length() <= 14 , "banker is error");
-        eosio::print("what happen is results[2]",results[2]);
-        // string* p = results[2];
+      
         char c[20];
         strcpy(c,results[2].c_str());
         bet(eosio::string_to_name(c), transfer.from, transfer.quantity);
@@ -125,7 +124,6 @@ void eosbaozi::create(account_name banker, asset stake)
 void eosbaozi::bet(account_name banker,account_name player, asset bet)
 {
     eosio_assert(player != banker, "don't bet yourself");
-    eosio::print("hello,what wrong ",banker);
     auto itr = gametables.find(banker);
 
     eosio_assert(itr != gametables.end(), "table is not exist");
@@ -184,30 +182,32 @@ void eosbaozi::draw(account_name banker)
 
     //将点数小于庄家点数的玩家投注金额加入庄家
     asset curstake = itr->stake;
-    for(auto itp=curplayers.begin();itp != curplayers.end();++itp){
-        if((bankpoker[0]+bankpoker[1]) < (itp->poker[0]+itp->poker[1])){
-            curstake += itp->bet;
+    for(uint8_t playerturn = 0;playerturn < curplayers.size();playerturn++){
+        if((bankpoker[0]+bankpoker[1]) >= ((curplayers[playerturn].poker[0])+(curplayers[playerturn].poker[1]))){
+            eosio::print("here is player bigger");
+            curstake += curplayers[playerturn].bet;
         }
     }
 
     //从大到小排序将庄家的金额加入点数大于庄家的玩家
-    for(auto it=curplayers.begin();it != curplayers.end();++it){
-        if((bankpoker[0]+bankpoker[1]) < (it->poker[0]+it->poker[1])){
-        
-            if(curstake>=it->bet){
+    for(uint8_t playerturn = 0;playerturn < curplayers.size();playerturn++){
+        if((bankpoker[0]+bankpoker[1]) < ((curplayers[playerturn].poker[0])+(curplayers[playerturn].poker[1]))){
+            eosio::print("here is banker bigger");
+            if(curstake.amount >= (curplayers[playerturn].bet.amount)){
                 //余额充足的情况下玩家获得一倍收益
-                addbalance(it->name,(it->bet)*2);
-                curstake -= it->bet;
+                addbalance(curplayers[playerturn].name,(curplayers[playerturn].bet)*2);
+                curstake -= curplayers[playerturn].bet;
             }else{
                 //余额不足的情况下玩家获得余额为收益
-                addbalance(it->name, (it->bet + curstake));
+                addbalance(curplayers[playerturn].name, (curplayers[playerturn].bet + curstake));
                 curstake = asset(0,CORE_SYMBOL);
             }
         }
     }
+    
     //庄家余额不足10时自动下庄
     if(curstake.amount < 10){
-        addbalance(banker, itr->stake);
+        addbalance(banker, curstake);
         gametables.erase(itr);
     }else{
         //否则继续开启下一轮游戏
@@ -246,7 +246,6 @@ void eosbaozi::generaterandom(checksum256 &result, uint64_t round){
 
 void eosbaozi::drop(account_name banker)
 {
-    eosio::print("hello my friend");
     require_auth(banker);
     auto itr = gametables.find(banker);
     eosio_assert(itr != gametables.end(), "table is not exist");
