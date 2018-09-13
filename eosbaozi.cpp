@@ -184,7 +184,6 @@ void eosbaozi::draw(account_name banker)
     asset curstake = itr->stake;
     for(uint8_t playerturn = 0;playerturn < curplayers.size();playerturn++){
         if((bankpoker[0]+bankpoker[1]) >= ((curplayers[playerturn].poker[0])+(curplayers[playerturn].poker[1]))){
-            eosio::print("here is player bigger");
             curstake += curplayers[playerturn].bet;
         }
     }
@@ -192,7 +191,6 @@ void eosbaozi::draw(account_name banker)
     //从大到小排序将庄家的金额加入点数大于庄家的玩家
     for(uint8_t playerturn = 0;playerturn < curplayers.size();playerturn++){
         if((bankpoker[0]+bankpoker[1]) < ((curplayers[playerturn].poker[0])+(curplayers[playerturn].poker[1]))){
-            eosio::print("here is banker bigger");
             if(curstake.amount >= (curplayers[playerturn].bet.amount)){
                 //余额充足的情况下玩家获得一倍收益
                 addbalance(curplayers[playerturn].name,(curplayers[playerturn].bet)*2);
